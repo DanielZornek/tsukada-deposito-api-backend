@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+ambienteVirtual/
+db.sqlite3
+.env
+firebase-sdk.json

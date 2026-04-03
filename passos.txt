@@ -1,0 +1,93 @@
+DEPENDÊNCIAS
+
+° django
+    pip install django
+° djangorestframework
+    pip install djangorestframework
+° django-cors-headers
+    pip install django-cors-headers
+° firebase-admin
+    pip install firebase-admin
+° cloudinary
+    pip install cloudinary
+° gunicorn
+    pip install gunicorn
+
+* Instalar só depois de ativar o ambiente!!!
+
+criar ambiente virtual 
+
+- python3 -m venv ambienteVirtual
+
+Ativar o ambiente
+
+source ambienteVirtual/bin/activate
+
+Criando projeto 
+
+- django-admin startproject core .
+    * "." esse ponto é para criar na pasta atual e não criar uma sub.
+
+Criar app 
+
+python manage.py startapp api
+
+Configurações
+
+* No settings.py do projeto adicionar as bibliotecas:
+
+INSTALLED_APPS = [
+    ...
+    'rest_framework',      # Para a API
+    'corsheaders',         # Para o React Native conseguir acessar
+    'api',                 # O seu app que você acabou de criar
+]
+
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # ESSENCIAL
+    ...
+]
+
+Rodar para ver se está funcionando
+
+python manage.py runserver
+
+Configuração FIrebase
+
+ - Criar um banco no Firestore e Authenticaton
+ - Gerar o Json de conexão
+ - Colocar o json onde fica o manage.py
+ - Em apps.py do app, deixar assim:
+        import os
+        import firebase_admin
+        from firebase_admin import credentials
+        from django.apps import AppConfig
+        from django.conf import settings
+
+        class ApiConfig(AppConfig):
+            default_auto_field = 'django.db.models.BigAutoField'
+            name = 'api'
+
+            def ready(self):
+                # Nome exato do arquivo que você colocou na pasta do manage.py
+                file_name = 'firebase-sdk.json' 
+                cred_path = os.path.join(settings.BASE_DIR, file_name)
+                
+                # Inicializa o Firebase apenas uma vez
+                if not firebase_admin._apps:
+                    try:
+                        cred = credentials.Certificate(cred_path)
+                        firebase_admin.initialize_app(cred)
+                        print("✅ [Firebase] Conectado com sucesso à Tsukada API!")
+                    except Exception as e:
+                        print(f"❌ [Firebase] Erro ao conectar: {e}")
+
+ - Registrar no settings.py
+ INSTALLED_APPS = [
+    # ... outros apps ...
+    'rest_framework',
+    'corsheaders',
+    'api.apps.ApiConfig', # Garanta que a linha aponte para o ApiConfig
+ ]
+
+ - 
