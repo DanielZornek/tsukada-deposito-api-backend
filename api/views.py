@@ -6,28 +6,22 @@ from firebase_admin import auth
 
 # Cloudinary para a imagem  do produto
 import cloudinary.uploader  
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-class ProdutoListarView(APIView):
+class ProdutoView(APIView):
+    # Aceita JSON (do curl/insomnia) e Arquivos (do celular)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
+
+    # O GET para listar
     def get(self, request):
         db = firestore.client()
         produtos_ref = db.collection('produtos').stream()
-        
-        lista_produtos = []
-        for doc in produtos_ref:
-            p = doc.to_dict()
-            p['id'] = doc.id
-            lista_produtos.append(p)
-            
+        lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in produtos_ref]
         return Response(lista_produtos)
 
-class ProdutoCreateView(APIView):
-    
-    parser_classes = (MultiPartParser, FormParser)
-
+    # O POST para criar
     def post(self, request):
         db = firestore.client()
-
         data = request.data
         imagem_arquivo = request.FILES.get('imagem') 
         
@@ -38,19 +32,19 @@ class ProdutoCreateView(APIView):
                 resultado = cloudinary.uploader.upload(imagem_arquivo)
                 url_final = resultado['secure_url']
 
-            novo_doc = db.collection('produtos').add({
+            # Pegando os dados com segurança
+            novo_doc_ref = db.collection('produtos').add({
                 'nome': data.get('nome'),
                 'marca': data.get('marca'),
-                'preco': float(data.get('preco', 0)),
+                'preco': float(data.get('preco', 0) or 0),
                 'descricao': data.get('descricao'),
                 'imagem_url': url_final,
                 'tags': data.get('tags', []),
-                'estoque': int(data.get('estoque', 0))
+                'estoque': int(data.get('estoque', 0) or 0)
             })
             
             return Response({
-                "id": novo_doc[1].id, 
-                "imagem": url_final, 
+                "id": novo_doc_ref[1].id, 
                 "msg": "Produto salvo!"
             }, status=status.HTTP_201_CREATED)
             
