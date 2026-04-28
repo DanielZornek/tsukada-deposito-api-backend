@@ -5,7 +5,6 @@ from firebase_admin import firestore
 import cloudinary.uploader  
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
-# VIEW 1: APENAS LISTAR (Leitura)
 class ProdutoListarView(APIView):
     def get(self, request):
         db = firestore.client()
@@ -13,21 +12,23 @@ class ProdutoListarView(APIView):
         lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in produtos_ref]
         return Response(lista_produtos)
 
-# VIEW 2: APENAS CADASTRAR (Escrita)
 class ProdutoCreateView(APIView):
-    # Deixando o JSONParser como primeiro para o endpoint web funcionar melhor
-    parser_classes = (JSONParser, MultiPartParser, FormParser)
+    
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def post(self, request):
         db = firestore.client()
-        data = request.data
         
-        # Se o data vier vazio, tentamos forçar a leitura do JSON
-        if not data:
-            import json
-            data = json.loads(request.body)
+        # O DRF já resolve o parse para você automaticamente
+        data = request.data
 
         try:
+            # Pegar o nome com segurança
+            nome = data.get('nome')
+
+            if not nome:
+                return Response({"erro": "Nome do produto é obrigatório"}, status=status.HTTP_400_BAD_REQUEST)
+
             imagem_arquivo = request.FILES.get('imagem') 
             url_final = data.get('imagem_url', '') 
 
@@ -35,25 +36,29 @@ class ProdutoCreateView(APIView):
                 resultado = cloudinary.uploader.upload(imagem_arquivo)
                 url_final = resultado['secure_url']
 
-            # Criando o dicionário com dados garantidos
+            # Conversão segura para números
+            try:
+                preco = float(data.get('preco', 0))
+                estoque = int(data.get('estoque', 0))
+            except (ValueError, TypeError):
+                preco = 0
+                estoque = 0
+
             dados_produto = {
-                'nome': data.get('nome'),
+                'nome': nome,
                 'marca': data.get('marca'),
-                'preco': float(data.get('preco') or 0),
+                'preco': preco,
                 'descricao': data.get('descricao', ''),
                 'imagem_url': url_final,
                 'tags': data.get('tags', []),
-                'estoque': int(data.get('estoque') or 0)
+                'estoque': estoque
             }
 
-            # Validação simples: se não tem nome, não salva
-            if not dados_produto['nome']:
-                return Response({"erro": "Nome do produto é obrigatório"}, status=400)
-
-            novo_doc = db.collection('produtos').add(dados_produto)
+            # No Firestore, o .add() retorna (time, doc_ref)
+            _, novo_doc = db.collection('produtos').add(dados_produto)
             
             return Response({
-                "id": novo_doc[1].id, 
+                "id": novo_doc.id, 
                 "msg": "Produto salvo com sucesso!"
             }, status=status.HTTP_201_CREATED)
             
