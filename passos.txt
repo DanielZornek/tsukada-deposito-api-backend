@@ -91,3 +91,15 @@ Configuração FIrebase
  ]
 
  - 
+
+Modelo JSON para fazer o POST do produto
+
+{
+    "nome": "Cimento CP II Votoran 50kg",
+    "marca": "Votorantim",
+    "preco": 38.9,
+    "estoque": 100,
+    "categoria": "Material de Construção",
+    "tags": ["obra", "reforma", "banheiro", "fundação"],
+    "descricao": "Cimento de alta resistência para diversas etapas da obra."
+}

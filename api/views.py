@@ -8,26 +8,33 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 class ProdutoListarView(APIView):
     def get(self, request):
         db = firestore.client()
-        produtos_ref = db.collection('produtos').stream()
-        lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in produtos_ref]
+        categoria_query = request.query_params.get('categoria')
+
+        produtos_ref = db.collection('produtos')
+
+        if categoria_query:
+            produtos_ref = produtos_ref.where('categoria', '==', categoria_query)
+        
+        docs = produtos_ref.stream()
+        lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in docs]
+        
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def post(self, request):
         db = firestore.client()
-        
-        # O DRF já resolve o parse para você automaticamente
         data = request.data
 
         try:
-            # Pegar o nome com segurança
             nome = data.get('nome')
-
             if not nome:
                 return Response({"erro": "Nome do produto é obrigatório"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            categoria = data.get('categoria')
+            if not categoria:
+                return Response({"erro": "Categoria é obrigatória para a inteligência do Chatbot"}, status=status.HTTP_400_BAD_REQUEST)
 
             imagem_arquivo = request.FILES.get('imagem') 
             url_final = data.get('imagem_url', '') 
@@ -36,7 +43,6 @@ class ProdutoCreateView(APIView):
                 resultado = cloudinary.uploader.upload(imagem_arquivo)
                 url_final = resultado['secure_url']
 
-            # Conversão segura para números
             try:
                 preco = float(data.get('preco', 0))
                 estoque = int(data.get('estoque', 0))
@@ -44,17 +50,19 @@ class ProdutoCreateView(APIView):
                 preco = 0
                 estoque = 0
 
+            # Estrutura otimizada para busca e chatbot
             dados_produto = {
                 'nome': nome,
-                'marca': data.get('marca'),
+                'marca': data.get('marca', 'Genérico'),
                 'preco': preco,
+                'estoque': estoque,
+                'categoria': categoria,
                 'descricao': data.get('descricao', ''),
                 'imagem_url': url_final,
-                'tags': data.get('tags', []),
-                'estoque': estoque
+                'tags': data.get('tags', []), 
+                'data_cadastro': firestore.SERVER_TIMESTAMP
             }
 
-            # No Firestore, o .add() retorna (time, doc_ref)
             _, novo_doc = db.collection('produtos').add(dados_produto)
             
             return Response({
@@ -63,7 +71,7 @@ class ProdutoCreateView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
-            return Response({"erro": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"erro": f"Erro interno: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 class RegistroUsuarioView(APIView):
     def post(self, request):
@@ -77,7 +85,7 @@ class RegistroUsuarioView(APIView):
             db = firestore.client()
             db.collection('usuarios').document(user.uid).set({
                 'nome': data.get('nome'),
-                'tipo': 'cliente' # ou 'vendedor'
+                'tipo': 'cliente'
             })
             
             return Response({"uid": user.uid, "msg": "Usuário criado com sucesso!"})
