@@ -7,6 +7,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 class ProdutoListarView(APIView):
     def get(self, request):
+        inicializar_firebase_se_necessario()
         db = firestore.client()
         categoria_query = request.query_params.get('categoria')
 
