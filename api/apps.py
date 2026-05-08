@@ -1,21 +1,27 @@
 import os
 import json
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials
 
-# Função de segurança para garantir que o Firebase está ligado
-def inicializar_firebase_se_necessario():
+def carregar_firebase():
     if not firebase_admin._apps:
-        # Tenta pegar da Azure
-        firebase_json = os.environ.get('FIREBASE_CONFIG')
-        if firebase_json:
+        config_raw = os.environ.get('FIREBASE_CONFIG')
+        
+        if config_raw:
             try:
-                cred = credentials.Certificate(json.loads(firebase_json))
+                if "\\n" in config_raw:
+                    config_raw = config_raw.replace("\\n", "\n")
+                
+                cred_dict = json.loads(config_raw, strict=False)
+                
+                if 'private_key' in cred_dict:
+                    cred_dict['private_key'] = cred_dict['private_key'].replace("\\n", "\n")
+                
+                cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred)
-            except:
-                pass 
+                print("✅ Firebase conectado via Variável!")
+            except Exception as e:
+                print(f"❌ Erro ao processar JSON: {e}")
         else:
-            try:
-                firebase_admin.initialize_app()
-            except:
-                pass
+            cred = credentials.Certificate('firebase-sdk.json')
+            firebase_admin.initialize_app(cred)
