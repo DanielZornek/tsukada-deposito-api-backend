@@ -2,6 +2,7 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials
+from django.apps import AppConfig
 
 def carregar_firebase():
     if not firebase_admin._apps:
@@ -25,3 +26,10 @@ def carregar_firebase():
         else:
             cred = credentials.Certificate('firebase-sdk.json')
             firebase_admin.initialize_app(cred)
+
+class ApiConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'api'
+
+    def ready(self):
+        carregar_firebase()
