@@ -1,7 +1,12 @@
 import os
 import json
 import firebase_admin
+import cloudinary.uploader 
 from firebase_admin import credentials, firestore, auth
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 def inicializar_firebase_se_necessario():
     if not firebase_admin._apps:
@@ -15,14 +20,14 @@ def inicializar_firebase_se_necessario():
                     cred_dict['private_key'] = cred_dict['private_key'].replace("\\n", "\n")
                 cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred)
-            except:
-                pass
+            except Exception as e:
+                print(f"Erro no Firebase: {e}")
         else:
             try:
                 cred = credentials.Certificate('firebase-sdk.json')
                 firebase_admin.initialize_app(cred)
-            except:
-                pass
+            except Exception as e:
+                print(f"Erro no Firebase: {e}")
 
 class ProdutoListarView(APIView):
     def get(self, request):
