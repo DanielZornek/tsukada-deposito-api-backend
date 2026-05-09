@@ -1,14 +1,33 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from firebase_admin import firestore
-import cloudinary.uploader  
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+import os
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore, auth
+
+def inicializar_firebase_se_necessario():
+    if not firebase_admin._apps:
+        config_raw = os.environ.get('FIREBASE_CONFIG')
+        if config_raw:
+            try:
+                if "\\n" in config_raw:
+                    config_raw = config_raw.replace("\\n", "\n")
+                cred_dict = json.loads(config_raw, strict=False)
+                if 'private_key' in cred_dict:
+                    cred_dict['private_key'] = cred_dict['private_key'].replace("\\n", "\n")
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+            except:
+                pass
+        else:
+            try:
+                cred = credentials.Certificate('firebase-sdk.json')
+                firebase_admin.initialize_app(cred)
+            except:
+                pass
 
 class ProdutoListarView(APIView):
     def get(self, request):
         inicializar_firebase_se_necessario()
-        db = firestore.client()
+        db = firestore.client().
         categoria_query = request.query_params.get('categoria')
 
         produtos_ref = db.collection('produtos')
@@ -25,6 +44,7 @@ class ProdutoCreateView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def post(self, request):
+        inicializar_firebase_se_necessario()
         db = firestore.client()
         data = request.data
 
