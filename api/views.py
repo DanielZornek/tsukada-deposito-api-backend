@@ -46,7 +46,7 @@ class ProdutoListarView(APIView):
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def post(self, request):
         inicializar_firebase_se_necessario()
