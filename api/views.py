@@ -27,7 +27,7 @@ def inicializar_firebase_se_necessario():
 class ProdutoListarView(APIView):
     def get(self, request):
         inicializar_firebase_se_necessario()
-        db = firestore.client().
+        db = firestore.client()
         categoria_query = request.query_params.get('categoria')
 
         produtos_ref = db.collection('produtos')
