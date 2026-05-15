@@ -2,6 +2,6 @@ django
 djangorestframework
 django-cors-headers
 firebase-admin
-cloudinary
 gunicorn
 requests
+azure-storage-blob
