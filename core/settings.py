@@ -125,3 +125,5 @@ ALLOWED_HOSTS = ['*']
 
 # Isso permite que o React Native acesse a API sem ser bloqueado por segurança
 CORS_ALLOW_ALL_ORIGINS = True
+
+# force deploy
