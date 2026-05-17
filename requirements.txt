@@ -1,8 +1,7 @@
-django==6.0.3
+django
 djangorestframework
 django-cors-headers
 firebase-admin
 gunicorn
 requests
 azure-storage-blob
-# rebuild total
