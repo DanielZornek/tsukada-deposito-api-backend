@@ -116,3 +116,48 @@ class RegistroUsuarioView(APIView):
             return Response({"uid": user.uid, "msg": "Usuário criado com sucesso!"})
         except Exception as e:
             return Response({"erro": str(e)}, status=400)
+
+import requests
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+class LoginUsuarioView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        senha = request.data.get('senha')
+
+        if not email or not senha:
+            return Response({"erro": "E-mail e senha são obrigatórios."}, status=status.HTTP_400_BAD_REQUEST)
+
+        firebase_web_api_key = "AIzaSyBX_rii0Q-A7bV0N3iuiVyfBBb9GcZHaNk"
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_web_api_key}"
+
+        payload = {
+            "email": email,
+            "password": senha,
+            "returnSecureToken": True
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            res_data = response.json()
+
+            if response.status_code == 200:
+                return Response({
+                    "msg": "Login bem-sucedido",
+                    "idToken": res_data.get("idToken"), # Token de autenticação
+                    "localId": res_data.get("localId"), # UID do usuário no Firebase
+                    "email": res_data.get("email")
+                }, status=status.HTTP_200_OK)
+            else:
+                erro_message = res_data.get('error', {}).get('message', 'Erro ao autenticar.')
+                
+                if erro_message == "INVALID_LOGIN_CREDENTIALS" or erro_message == "EMAIL_NOT_FOUND" or erro_message == "INVALID_PASSWORD":
+                    erro_message = "E-mail ou senha incorretos."
+
+                return Response({"erro": erro_message}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"erro": f"Erro interno no servidor: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
