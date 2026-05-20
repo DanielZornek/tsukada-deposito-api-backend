@@ -1,16 +1,11 @@
 import os
 import json
-import uuid
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-from azure.storage.blob import BlobServiceClient
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
-AZURE_CONNECTION_STRING = os.environ.get('AZURE_STORAGE_CONNECTION_STRING')
-AZURE_CONTAINER_NAME = os.environ.get('AZURE_CONTAINER_NAME', 'fotos-produtos')
+from rest_framework.parsers import JSONParser # Mantemos apenas o JSONParser
 
 def inicializar_firebase_se_necessario():
     if not firebase_admin._apps:
@@ -21,7 +16,8 @@ def inicializar_firebase_se_necessario():
                     config_raw = config_raw.replace("\\n", "\n")
                 cred_dict = json.loads(config_raw, strict=False)
                 if 'private_key' in cred_dict:
-                    cred_dict['private_key'] = cred_dict['private_key'].replace("\\n", "\n")
+                    config_raw_pk = cred_dict['private_key'].replace("\\n", "\n")
+                    cred_dict['private_key'] = config_raw_pk
                 cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred)
             except Exception as e:
@@ -46,7 +42,8 @@ class ProdutoListarView(APIView):
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    # Mudado para aceitar APENAS JSON que vem do app
+    parser_classes = (JSONParser,)
 
     def post(self, request):
         inicializar_firebase_se_necessario()
@@ -61,19 +58,8 @@ class ProdutoCreateView(APIView):
             if not categoria:
                 return Response({"erro": "Categoria é obrigatória"}, status=status.HTTP_400_BAD_REQUEST)
 
-            imagem_arquivo = request.FILES.get('imagem') 
+            # Agora pegamos a URL da imagem que o React Native já enviou direto pro Firebase
             url_final = data.get('imagem_url', '') 
-
-            if imagem_arquivo:
-                try:
-                    extensao = os.path.splitext(imagem_arquivo.name)[1]
-                    nome_blob = f"{uuid.uuid4()}{extensao}"
-                    blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
-                    blob_client = blob_service_client.get_blob_client(container=AZURE_CONTAINER_NAME, blob=nome_blob)
-                    blob_client.upload_blob(imagem_arquivo, overwrite=True)
-                    url_final = blob_client.url
-                except Exception as e:
-                    return Response({"erro": f"Erro upload Azure: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
                 preco = float(data.get('preco', 0))
@@ -89,7 +75,7 @@ class ProdutoCreateView(APIView):
                 'estoque': estoque,
                 'categoria': categoria,
                 'descricao': data.get('descricao', ''),
-                'imagem_url': url_final,
+                'imagem_url': url_final, # Gravando a URL no documento do Firestore
                 'tags': data.get('tags', []), 
                 'data_cadastro': firestore.SERVER_TIMESTAMP
             }
@@ -112,52 +98,3 @@ class RegistroUsuarioView(APIView):
             db.collection('usuarios').document(user.uid).set({
                 'nome': data.get('nome'),
                 'tipo': 'cliente'
-            })
-            return Response({"uid": user.uid, "msg": "Usuário criado com sucesso!"})
-        except Exception as e:
-            return Response({"erro": str(e)}, status=400)
-
-import requests
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-
-class LoginUsuarioView(APIView):
-    def post(self, request):
-        email = request.data.get('email')
-        senha = request.data.get('senha')
-
-        if not email or not senha:
-            return Response({"erro": "E-mail e senha são obrigatórios."}, status=status.HTTP_400_BAD_REQUEST)
-
-        firebase_web_api_key = "AIzaSyBX_rii0Q-A7bV0N3iuiVyfBBb9GcZHaNk"
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_web_api_key}"
-
-        payload = {
-            "email": email,
-            "password": senha,
-            "returnSecureToken": True
-        }
-
-        try:
-            response = requests.post(url, json=payload)
-            res_data = response.json()
-
-            if response.status_code == 200:
-                return Response({
-                    "msg": "Login bem-sucedido",
-                    "idToken": res_data.get("idToken"), # Token de autenticação
-                    "localId": res_data.get("localId"), # UID do usuário no Firebase
-                    "email": res_data.get("email")
-                }, status=status.HTTP_200_OK)
-            else:
-                erro_message = res_data.get('error', {}).get('message', 'Erro ao autenticar.')
-                
-                if erro_message == "INVALID_LOGIN_CREDENTIALS" or erro_message == "EMAIL_NOT_FOUND" or erro_message == "INVALID_PASSWORD":
-                    erro_message = "E-mail ou senha incorretos."
-
-                return Response({"erro": erro_message}, status=status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            return Response({"erro": f"Erro interno no servidor: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
