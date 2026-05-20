@@ -1,6 +1,7 @@
 import os
 import json
 import firebase_admin
+import requests
 from firebase_admin import credentials, firestore, auth
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -41,12 +42,14 @@ class ProdutoListarView(APIView):
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    parser_classes = (JSONParser,) # Apenas JSONParser ativo
+    # Força a API a aceitar apenas JSON puro, resolvendo o erro 415 (Unsupported Media Type)
+    parser_classes = (JSONParser,) 
 
     def post(self, request):
         inicializar_firebase_se_necessario()
         db = firestore.client()
         data = request.data
+        
         try:
             nome = data.get('nome')
             if not nome:
@@ -56,7 +59,7 @@ class ProdutoCreateView(APIView):
             if not categoria:
                 return Response({"erro": "Categoria é obrigatória"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # O Django simplesmente captura a URL de imagem que o React Native gerou na Azure
+            # Aqui o Django pega a string da URL da Azure enviada pelo React Native
             url_final = data.get('imagem_url', '') 
 
             try:
@@ -73,7 +76,7 @@ class ProdutoCreateView(APIView):
                 'estoque': estoque,
                 'categoria': categoria,
                 'descricao': data.get('descricao', ''),
-                'imagem_url': url_final, # Grava a URL da Azure no Firebase Firestore
+                'imagem_url': url_final, # Salva o link da Azure no Firestore do Firebase
                 'tags': data.get('tags', []), 
                 'data_cadastro': firestore.SERVER_TIMESTAMP
             }
