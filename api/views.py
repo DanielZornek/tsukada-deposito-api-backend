@@ -1,7 +1,7 @@
 import os
 import json
-import firebase_admin
 import requests
+import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -33,16 +33,39 @@ class ProdutoListarView(APIView):
     def get(self, request):
         inicializar_firebase_se_necessario()
         db = firestore.client()
+        
+        # Captura os parâmetros de preço enviados pelo React Native
         categoria_query = request.query_params.get('categoria')
+        preco_min_query = request.query_params.get('precoMin')
+        preco_max_query = request.query_params.get('precoMax')
+        
         produtos_ref = db.collection('produtos')
-        if categoria_query:
+        
+        # Filtro de categoria direto na query do banco
+        if categoria_query and categoria_query != 'Todas':
             produtos_ref = produtos_ref.where('categoria', '==', categoria_query)
+        
         docs = produtos_ref.stream()
         lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in docs]
+        
+        # FILTRO DE RANGE DE PREÇO EM PYTHON (Sua lógica perfeita)
+        if preco_min_query:
+            try:
+                min_val = float(preco_min_query)
+                lista_produtos = [p for p in lista_produtos if float(p.get('preco', 0)) >= min_val]
+            except ValueError:
+                pass
+                
+        if preco_max_query:
+            try:
+                max_val = float(preco_max_query)
+                lista_produtos = [p for p in lista_produtos if float(p.get('preco', 0)) <= max_val]
+            except ValueError:
+                pass
+
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    # Força a API a aceitar apenas JSON puro, resolvendo o erro 415 (Unsupported Media Type)
     parser_classes = (JSONParser,) 
 
     def post(self, request):
@@ -81,12 +104,12 @@ class ProdutoCreateView(APIView):
             }
 
             _, novo_doc = db.collection('produtos').add(dados_produto)
-            return Response({"id": novo_doc.id, "msg": "Produto salvo com sucesso!"}, status=status.HTTP_201_CREATED)
+            return Response({"id": novo_doc.id, "msg": "Produto saved com sucesso!"}, status=status.HTTP_201_CREATED)
             
         except Exception as e:
             return Response({"erro": f"Erro interno: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 🛠️ NOVO MÉTODO: Responsável por atualizar o produto no Firestore da Azure
+    # MÉTODO PUT CORRIGIDO E OTIMIZADO
     def put(self, request, pk=None):
         inicializar_firebase_se_necessario()
         db = firestore.client()
@@ -96,38 +119,40 @@ class ProdutoCreateView(APIView):
             return Response({"erro": "O ID do produto é obrigatório para atualização."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Referência direta ao documento do Firestore usando a string do ID (ex: f3WQYAZyZeoN3vBeU5PZ)
             produto_ref = db.collection('produtos').document(pk)
-            
-            # Verifica se o produto realmente existe antes de tentar atualizar
             doc = produto_ref.get()
+            
             if not doc.exists:
                 return Response({"erro": "Produto não localizado no banco de dados."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Tratamento básico dos tipos de dados numéricos
-            try:
-                preco = float(data.get('preco', 0))
-                estoque = int(data.get('estoque', 0))
-            except (ValueError, TypeError):
-                preco = doc.to_dict().get('preco', 0)
-                estoque = doc.to_dict().get('estoque', 0)
+            # Extrai os dados atuais uma única vez para melhor performance e segurança
+            dados_antigos = doc.to_dict() or {}
 
-            # Monta o dicionário com os campos atualizados
+            # Tratamento seguro dos tipos numéricos
+            try:
+                preco = float(data.get('preco')) if data.get('preco') is not None else float(dados_antigos.get('preco', 0))
+            except (ValueError, TypeError):
+                preco = float(dados_antigos.get('preco', 0))
+
+            try:
+                estoque = int(data.get('estoque')) if data.get('estoque') is not None else int(dados_antigos.get('estoque', 0))
+            except (ValueError, TypeError):
+                estoque = int(dados_antigos.get('estoque', 0))
+
+            # Monta o dicionário de atualização comparando o dado novo com o antigo
             dados_atualizados = {
-                'nome': data.get('nome', doc.to_dict().get('nome')),
-                'marca': data.get('marca', doc.to_dict().get('marca', 'Genérico')),
+                'nome': data.get('nome') if data.get('nome') is not None else dados_antigos.get('nome'),
+                'marca': data.get('marca') if data.get('marca') is not None else dados_antigos.get('marca', 'Genérico'),
                 'preco': preco,
                 'estoque': estoque,
-                'categoria': data.get('categoria', doc.to_dict().get('categoria')),
-                'descricao': data.get('descricao', doc.to_dict().get('descricao', '')),
-                'imagem_url': data.get('imagem_url', doc.to_dict().get('imagem_url', '')),
-                'tags': data.get('tags', doc.to_dict().get('tags', [])),
-                'data_atualizacao': firestore.SERVER_TIMESTAMP # Registra o momento da edição
+                'categoria': data.get('categoria') if data.get('categoria') is not None else dados_antigos.get('categoria'),
+                'descricao': data.get('descricao') if data.get('descricao') is not None else dados_antigos.get('descricao', ''),
+                'imagem_url': data.get('imagem_url') if data.get('imagem_url') is not None else dados_antigos.get('imagem_url', ''),
+                'tags': data.get('tags') if data.get('tags') is not None else dados_antigos.get('tags', []),
+                'data_atualizacao': firestore.SERVER_TIMESTAMP 
             }
 
-            # Executa a atualização parcial ou total no documento do Firestore
             produto_ref.update(dados_atualizados)
-
             return Response({"id": pk, "msg": "Produto atualizado com sucesso no Firestore!"}, status=status.HTTP_200_OK)
 
         except Exception as e:
