@@ -3,7 +3,8 @@ from .views import (
     RegistroUsuarioView, 
     ProdutoListarView, 
     ProdutoCreateView, 
-    LoginUsuarioView
+    LoginUsuarioView,
+    PerfilUsuarioView
 )
 
 urlpatterns = [
@@ -22,4 +23,5 @@ urlpatterns = [
     # Rotas de Usuário
     path('usuarios/registrar/', RegistroUsuarioView.as_view(), name='registrar_usuario'),
     path('usuarios/login/', LoginUsuarioView.as_view(), name='login_usuario'),
+    path('usuarios/perfil/<str:uid>/', PerfilUsuarioView.as_view(), name='perfil_usuario'),
 ]

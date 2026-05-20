@@ -221,3 +221,32 @@ class LoginUsuarioView(APIView):
 
         except Exception as e:
             return Response({"erro": f"Erro interno no servidor: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class PerfilUsuarioView(APIView):
+    def delete(self, request, uid):
+        inicializar_firebase_se_necessario()
+        try:
+            # 1. Deleta o usuário da autenticação do Firebase
+            auth.delete_user(uid)
+            
+            # 2. Deleta o documento do usuário no Firestore
+            db = firestore.client()
+            db.collection('usuarios').document(uid).delete()
+            
+            return Response({"msg": "Conta excluída com sucesso!"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"erro": f"Erro ao excluir conta: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, uid):
+        # Aqui você pode implementar a lógica de atualização de nome, por exemplo
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+        data = request.data
+        
+        try:
+            db.collection('usuarios').document(uid).update({
+                'nome': data.get('nome')
+            })
+            return Response({"msg": "Perfil atualizado com sucesso!"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"erro": f"Erro ao atualizar: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
