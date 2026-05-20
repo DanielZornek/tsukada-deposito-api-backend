@@ -59,7 +59,6 @@ class ProdutoCreateView(APIView):
             if not categoria:
                 return Response({"erro": "Categoria é obrigatória"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Aqui o Django pega a string da URL da Azure enviada pelo React Native
             url_final = data.get('imagem_url', '') 
 
             try:
@@ -76,7 +75,7 @@ class ProdutoCreateView(APIView):
                 'estoque': estoque,
                 'categoria': categoria,
                 'descricao': data.get('descricao', ''),
-                'imagem_url': url_final, # Salva o link da Azure no Firestore do Firebase
+                'imagem_url': url_final, 
                 'tags': data.get('tags', []), 
                 'data_cadastro': firestore.SERVER_TIMESTAMP
             }
@@ -87,31 +86,74 @@ class ProdutoCreateView(APIView):
         except Exception as e:
             return Response({"erro": f"Erro interno: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # 🛠️ NOVO MÉTODO: Responsável por atualizar o produto no Firestore da Azure
+    def put(self, request, pk=None):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+        data = request.data
+
+        if not pk:
+            return Response({"erro": "O ID do produto é obrigatório para atualização."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Referência direta ao documento do Firestore usando a string do ID (ex: f3WQYAZyZeoN3vBeU5PZ)
+            produto_ref = db.collection('produtos').document(pk)
+            
+            # Verifica se o produto realmente existe antes de tentar atualizar
+            doc = produto_ref.get()
+            if not doc.exists:
+                return Response({"erro": "Produto não localizado no banco de dados."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Tratamento básico dos tipos de dados numéricos
+            try:
+                preco = float(data.get('preco', 0))
+                estoque = int(data.get('estoque', 0))
+            except (ValueError, TypeError):
+                preco = doc.to_dict().get('preco', 0)
+                estoque = doc.to_dict().get('estoque', 0)
+
+            # Monta o dicionário com os campos atualizados
+            dados_atualizados = {
+                'nome': data.get('nome', doc.to_dict().get('nome')),
+                'marca': data.get('marca', doc.to_dict().get('marca', 'Genérico')),
+                'preco': preco,
+                'estoque': estoque,
+                'categoria': data.get('categoria', doc.to_dict().get('categoria')),
+                'descricao': data.get('descricao', doc.to_dict().get('descricao', '')),
+                'imagem_url': data.get('imagem_url', doc.to_dict().get('imagem_url', '')),
+                'tags': data.get('tags', doc.to_dict().get('tags', [])),
+                'data_atualizacao': firestore.SERVER_TIMESTAMP # Registra o momento da edição
+            }
+
+            # Executa a atualização parcial ou total no documento do Firestore
+            produto_ref.update(dados_atualizados)
+
+            return Response({"id": pk, "msg": "Produto atualizado com sucesso no Firestore!"}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"erro": f"Erro ao atualizar no Firestore: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
 class RegistroUsuarioView(APIView):
     def post(self, request):
         data = request.data
         try:
-            # Cria o usuário no Firebase Authentication
             user = auth.create_user(
                 email=data.get('email'),
                 password=data.get('senha')
             )
             
-            # Salva os dados complementares no Firestore
             db = firestore.client()
             db.collection('usuarios').document(user.uid).set({
                 'nome': data.get('nome'),
                 'tipo': 'cliente'
             })
             
-            # RETORNO DE SUCESSO (Estava faltando daqui para baixo)
             return Response({
                 "uid": user.uid, 
                 "msg": "Usuário criado com sucesso!"
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
-            # TRATAMENTO DE ERRO (Estava faltando)
             return Response({
                 "erro": str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
