@@ -5,7 +5,7 @@ from firebase_admin import credentials, firestore, auth
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.parsers import JSONParser # Mantemos apenas o JSONParser
+from rest_framework.parsers import JSONParser # Aceitamos apenas JSON simples
 
 def inicializar_firebase_se_necessario():
     if not firebase_admin._apps:
@@ -16,8 +16,7 @@ def inicializar_firebase_se_necessario():
                     config_raw = config_raw.replace("\\n", "\n")
                 cred_dict = json.loads(config_raw, strict=False)
                 if 'private_key' in cred_dict:
-                    config_raw_pk = cred_dict['private_key'].replace("\\n", "\n")
-                    cred_dict['private_key'] = config_raw_pk
+                    cred_dict['private_key'] = cred_dict['private_key'].replace("\\n", "\n")
                 cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred)
             except Exception as e:
@@ -42,8 +41,7 @@ class ProdutoListarView(APIView):
         return Response(lista_produtos)
 
 class ProdutoCreateView(APIView):
-    # Mudado para aceitar APENAS JSON que vem do app
-    parser_classes = (JSONParser,)
+    parser_classes = (JSONParser,) # Apenas JSONParser ativo
 
     def post(self, request):
         inicializar_firebase_se_necessario()
@@ -58,7 +56,7 @@ class ProdutoCreateView(APIView):
             if not categoria:
                 return Response({"erro": "Categoria é obrigatória"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Agora pegamos a URL da imagem que o React Native já enviou direto pro Firebase
+            # O Django simplesmente captura a URL de imagem que o React Native gerou na Azure
             url_final = data.get('imagem_url', '') 
 
             try:
@@ -75,7 +73,7 @@ class ProdutoCreateView(APIView):
                 'estoque': estoque,
                 'categoria': categoria,
                 'descricao': data.get('descricao', ''),
-                'imagem_url': url_final, # Gravando a URL no documento do Firestore
+                'imagem_url': url_final, # Grava a URL da Azure no Firebase Firestore
                 'tags': data.get('tags', []), 
                 'data_cadastro': firestore.SERVER_TIMESTAMP
             }
