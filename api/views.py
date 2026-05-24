@@ -249,15 +249,32 @@ class PerfilUsuarioView(APIView):
             return Response({"erro": f"Erro ao excluir conta: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request, uid):
-        # Aqui você pode implementar a lógica de atualização de nome, por exemplo
         inicializar_firebase_se_necessario()
-        db = firestore.client()
         data = request.data
+        db = firestore.client()
         
         try:
-            db.collection('usuarios').document(uid).update({
-                'nome': data.get('nome')
-            })
+            update_args = {}
+            if 'email' in data and data['email']: 
+                update_args['email'] = data['email']
+            if 'senha' in data and data['senha']: 
+                if len(str(data['senha'])) < 6:
+                    return Response({"erro": "A senha deve ter no mínimo 6 caracteres."}, status=status.HTTP_400_BAD_REQUEST)
+                update_args['password'] = data['senha']
+            
+            if update_args:
+                auth.update_user(uid, **update_args)
+            
+            if 'nome' in data and data['nome']:
+                db.collection('usuarios').document(uid).set(
+                    {'nome': data['nome']}, 
+                    merge=True
+                )
+            
             return Response({"msg": "Perfil atualizado com sucesso!"}, status=status.HTTP_200_OK)
+            
         except Exception as e:
-            return Response({"erro": f"Erro ao atualizar: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            erro_msg = str(e)
+            if "EMAIL_EXISTS" in erro_msg:
+                erro_msg = "Este e-mail já está sendo usado por outra conta."
+            return Response({"erro": f"Erro ao atualizar: {erro_msg}"}, status=status.HTTP_400_BAD_REQUEST)
