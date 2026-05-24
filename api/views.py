@@ -205,18 +205,29 @@ class LoginUsuarioView(APIView):
             res_data = response.json()
 
             if response.status_code == 200:
+                uid = res_data.get("localId")
+                
+                # 1. BUSCAR NOME NO FIRESTORE
+                db = firestore.client()
+                user_doc = db.collection('usuarios').document(uid).get()
+                
+                nome = "Usuário Tsukada" # Valor padrão
+                if user_doc.exists:
+                    nome = user_doc.to_dict().get('nome', "Usuário Tsukada")
+
+                # 2. RETORNAR TUDO INCLUINDO O NOME
                 return Response({
                     "msg": "Login bem-sucedido",
                     "idToken": res_data.get("idToken"), 
-                    "localId": res_data.get("localId"), 
-                    "email": res_data.get("email")
+                    "localId": uid, 
+                    "email": res_data.get("email"),
+                    "nome": nome  # <--- AGORA O APP RECEBE O NOME CORRETO
                 }, status=status.HTTP_200_OK)
+            
             else:
                 erro_message = res_data.get('error', {}).get('message', 'Erro ao autenticar.')
-                
                 if erro_message in ["INVALID_LOGIN_CREDENTIALS", "EMAIL_NOT_FOUND", "INVALID_PASSWORD"]:
                     erro_message = "E-mail ou senha incorretos."
-
                 return Response({"erro": erro_message}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
