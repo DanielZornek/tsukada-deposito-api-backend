@@ -48,7 +48,7 @@ class ProdutoListarView(APIView):
         docs = produtos_ref.stream()
         lista_produtos = [dict(doc.to_dict(), id=doc.id) for doc in docs]
         
-        # FILTRO DE RANGE DE PREÇO EM PYTHON (Sua lógica perfeita)
+        # FILTRO DE RANGE DE PREÇO EM PYTHON
         if preco_min_query:
             try:
                 min_val = float(preco_min_query)
@@ -109,7 +109,6 @@ class ProdutoCreateView(APIView):
         except Exception as e:
             return Response({"erro": f"Erro interno: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # MÉTODO PUT CORRIGIDO E OTIMIZADO
     def put(self, request, pk=None):
         inicializar_firebase_se_necessario()
         db = firestore.client()
@@ -125,10 +124,8 @@ class ProdutoCreateView(APIView):
             if not doc.exists:
                 return Response({"erro": "Produto não localizado no banco de dados."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Extrai os dados atuais uma única vez para melhor performance e segurança
             dados_antigos = doc.to_dict() or {}
 
-            # Tratamento seguro dos tipos numéricos
             try:
                 preco = float(data.get('preco')) if data.get('preco') is not None else float(dados_antigos.get('preco', 0))
             except (ValueError, TypeError):
@@ -139,7 +136,6 @@ class ProdutoCreateView(APIView):
             except (ValueError, TypeError):
                 estoque = int(dados_antigos.get('estoque', 0))
 
-            # Monta o dicionário de atualização comparando o dado novo com o antigo
             dados_atualizados = {
                 'nome': data.get('nome') if data.get('nome') is not None else dados_antigos.get('nome'),
                 'marca': data.get('marca') if data.get('marca') is not None else dados_antigos.get('marca', 'Genérico'),
@@ -153,7 +149,7 @@ class ProdutoCreateView(APIView):
             }
 
             produto_ref.update(dados_atualizados)
-            return Response({"id": pk, "msg": "Produto atualizado com sucesso no Firestore!"}, status=status.HTTP_200_OK)
+            return Response({"id": pk, "msg": "Produto updated com sucesso!"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"erro": f"Erro ao atualizar no Firestore: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -207,21 +203,19 @@ class LoginUsuarioView(APIView):
             if response.status_code == 200:
                 uid = res_data.get("localId")
                 
-                # 1. BUSCAR NOME NO FIRESTORE
                 db = firestore.client()
                 user_doc = db.collection('usuarios').document(uid).get()
                 
-                nome = "Usuário Tsukada" # Valor padrão
+                nome = "Usuário Tsukada"
                 if user_doc.exists:
                     nome = user_doc.to_dict().get('nome', "Usuário Tsukada")
 
-                # 2. RETORNAR TUDO INCLUINDO O NOME
                 return Response({
                     "msg": "Login bem-sucedido",
                     "idToken": res_data.get("idToken"), 
                     "localId": uid, 
                     "email": res_data.get("email"),
-                    "nome": nome  # <--- AGORA O APP RECEBE O NOME CORRETO
+                    "nome": nome
                 }, status=status.HTTP_200_OK)
             
             else:
@@ -236,14 +230,14 @@ class LoginUsuarioView(APIView):
 class PerfilUsuarioView(APIView):
     def delete(self, request, uid):
         inicializar_firebase_se_necessario()
+        db = firestore.client()
         try:
-            # 1. Deleta o usuário da autenticação do Firebase
-            auth.delete_user(uid)
+            try:
+                auth.delete_user(uid)
+            except Exception:
+                pass
             
-            # 2. Deleta o documento do usuário no Firestore
-            db = firestore.client()
             db.collection('usuarios').document(uid).delete()
-            
             return Response({"msg": "Conta excluída com sucesso!"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"erro": f"Erro ao excluir conta: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -278,3 +272,73 @@ class PerfilUsuarioView(APIView):
             if "EMAIL_EXISTS" in erro_msg:
                 erro_msg = "Este e-mail já está sendo usado por outra conta."
             return Response({"erro": f"Erro ao atualizar: {erro_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+
+class UsuarioReservasView(APIView):
+    def get(self, request, uid):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+        try:
+            reservas_ref = db.collection('reservas').where('usuario_id', '==', uid)
+            docs = reservas_ref.stream()
+            
+            lista_reservas = [dict(doc.to_dict(), id=doc.id) for doc in docs]
+            return Response(lista_reservas, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"erro": f"Erro ao buscar histórico de reservas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ProdutoReservarView(APIView):
+    parser_classes = (JSONParser,)
+
+    def post(self, request, pk):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+        data = request.data
+
+        try:
+            usuario_id = data.get('usuario_id')
+            if not usuario_id:
+                return Response({"erro": "O ID do usuário é obrigatório para vincular a reserva."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                quantidade_reserva = int(data.get('quantidade', 1))
+                if quantidade_reserva <= 0:
+                    return Response({"erro": "A quantidade deve ser maior que zero."}, status=status.HTTP_400_BAD_REQUEST)
+            except (ValueError, TypeError):
+                return Response({"erro": "Quantidade inválida."}, status=status.HTTP_400_BAD_REQUEST)
+
+            produto_ref = db.collection('produtos').document(pk)
+            doc = produto_ref.get()
+
+            if not doc.exists:
+                return Response({"erro": "Produto não localizado."}, status=status.HTTP_404_NOT_FOUND)
+
+            dados_produto = doc.to_dict() or {}
+            estoque_atual = int(dados_produto.get('estoque', 0))
+
+            if estoque_atual < quantidade_reserva:
+                return Response({
+                    "erro": f"Estoque insuficiente. Quantidade disponível: {estoque_atual}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            novo_estoque = estoque_atual - quantidade_reserva
+            produto_ref.update({'estoque': novo_estoque})
+
+            dados_reserva = {
+                'usuario_id': usuario_id,
+                'produto_id': pk,
+                'nome_produto': dados_produto.get('nome', 'Produto'),
+                'quantidade': quantidade_reserva,
+                'data_reserva': firestore.SERVER_TIMESTAMP,
+                'status': 'pendente'
+            }
+            
+            _, nova_reserva_doc = db.collection('reservas').add(dados_reserva)
+
+            return Response({
+                "id_reserva": nova_reserva_doc.id,
+                "msg": "Reserva realizada com sucesso!",
+                "estoque_restante": novo_estoque
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"erro": f"Erro ao processar reserva: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
