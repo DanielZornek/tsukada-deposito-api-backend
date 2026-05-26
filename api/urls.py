@@ -7,7 +7,8 @@ from .views import (
     PerfilUsuarioView,
     ProdutoReservarView,
     UsuarioReservasView,
-    ReservaDetailView  # Importando a nova View aqui
+    ReservaDetailView,
+    DashboardStatsView
 )
 
 urlpatterns = [
@@ -27,7 +28,7 @@ urlpatterns = [
     path('produtos/<str:pk>/reservar', ProdutoReservarView.as_view(), name='reservar_produto_sem_barra'),
     path('produtos/<str:pk>/reservar/', ProdutoReservarView.as_view(), name='reservar_produto'),
 
-    # ROTAS PARA ATUALIZAR STATUS DA RESERVA (PUT)
+    # Rotas para Atualizar Status da Reserva (PUT)
     path('reservas/<str:pk>', ReservaDetailView.as_view(), name='atualizar_reserva_sem_barra'),
     path('reservas/<str:pk>/', ReservaDetailView.as_view(), name='atualizar_reserva'),
 
@@ -42,4 +43,8 @@ urlpatterns = [
     # Rotas do Histórico de Reservas do Usuário (GET)
     path('usuarios/perfil/<str:uid>/reservas', UsuarioReservasView.as_view(), name='usuario_reservas_sem_barra'),
     path('usuarios/perfil/<str:uid>/reservas/', UsuarioReservasView.as_view(), name='usuario_reservas'),
+
+    # ROTAS DO DASHBOARD / PAINEL (GET)
+    path('dashboard/stats', DashboardStatsView.as_view(), name='dashboard_stats_sem_barra'),
+    path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard_stats'),
 ]

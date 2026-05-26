@@ -379,3 +379,62 @@ class ReservaDetailView(APIView):
 
         except Exception as e:
             return Response({"erro": f"Erro ao atualizar status da reserva: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
+
+class DashboardStatsView(APIView):
+    def get(self, request):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+
+        try:
+            # 1. Buscar todos os produtos para calcular os totais de estoque
+            produtos_docs = db.collection('produtos').stream()
+            
+            total_produtos_cadastrados = 0
+            produtos_baixo_estoque = 0
+            mapeamento_precos = {} # Guarda o preço de cada produto pelo ID para usar nas reservas
+
+            for doc in produtos_docs:
+                total_produtos_cadastrados += 1
+                dados = doc.to_dict()
+                
+                # Guarda o preço convertido para float
+                mapeamento_precos[doc.id] = float(dados.get('preco', 0))
+                
+                # Define "baixa no estoque" se for menor ou igual a 5 unidades
+                estoque = int(dados.get('estoque', 0))
+                if estoque <= 5:
+                    produtos_baixo_estoque += 1
+
+            # 2. Buscar todas as reservas para calcular os totais financeiros
+            reservas_docs = db.collection('reservas').stream()
+            
+            total_reservas_feitas = 0
+            total_dinheiro_reservado = 0.0
+
+            for doc in reservas_docs:
+                total_reservas_feitas += 1
+                dados_reserva = doc.to_dict()
+                
+                # Ignora cálculos se a reserva foi explicitamente cancelada
+                if dados_reserva.get('status') == 'cancelado':
+                    continue
+                    
+                prod_id = dados_reserva.get('produto_id')
+                qtd_reservada = int(dados_reserva.get('quantidade', 0))
+                
+                # Pega o preço do produto mapeado. Se não achar, usa 0
+                preco_unitario = mapeamento_precos.get(prod_id, 0.0)
+                
+                # Multiplica a quantidade pelo preço do produto
+                total_dinheiro_reservado += (qtd_reservada * preco_unitario)
+
+            # Retorna todos os dados mastigados para o React Native
+            return Response({
+                "total_produtos": total_produtos_cadastrados,
+                "total_reservas": total_reservas_feitas,
+                "produtos_baixo_estoque": produtos_baixo_estoque,
+                "total_dinheiro_reservado": round(total_dinheiro_reservado, 2)
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"erro": f"Erro ao gerar painel: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)            
