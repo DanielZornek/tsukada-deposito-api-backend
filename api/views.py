@@ -342,3 +342,40 @@ class ProdutoReservarView(APIView):
 
         except Exception as e:
             return Response({"erro": f"Erro ao processar reserva: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Adicione esta classe ao final do seu arquivo views.py
+
+class ReservaDetailView(APIView):
+    parser_classes = (JSONParser,)
+
+    def put(self, request, pk):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+        data = request.data
+
+        novo_status = data.get('status')
+        if not novo_status:
+            return Response({"erro": "O campo 'status' é obrigatório para atualização."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Aponta direto para o documento da reserva pelo ID dela (pk)
+            reserva_ref = db.collection('reservas').document(pk)
+            doc = reserva_ref.get()
+
+            if not doc.exists:
+                return Response({"erro": "Reserva não localizada."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Atualiza apenas o campo status e adiciona a data de modificação
+            reserva_ref.update({
+                'status': novo_status,
+                'data_atualizacao': firestore.SERVER_TIMESTAMP
+            })
+
+            return Response({
+                "id_reserva": pk,
+                "status_atual": novo_status,
+                "msg": "Status da reserva atualizado com sucesso!"
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"erro": f"Erro ao atualizar status da reserva: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
