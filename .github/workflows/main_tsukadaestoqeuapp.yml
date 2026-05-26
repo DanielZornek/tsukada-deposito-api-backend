@@ -63,4 +63,4 @@ jobs:
         with:
           app-name: 'TsukadaEstoqeuApp'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_F72EA7C79F734F3AA9BD1F4A806389A8 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_F55B7B72CD014384B0F119C9ABE7E1A6 }}
