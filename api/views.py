@@ -6,7 +6,7 @@ from firebase_admin import credentials, firestore, auth
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.parsers import JSONParser # Aceitamos apenas JSON simples
+from rest_framework.parsers import JSONParser
 
 def inicializar_firebase_se_necessario():
     if not firebase_admin._apps:
@@ -79,7 +79,7 @@ class ProdutoCreateView(APIView):
                 return Response({"erro": "Nome do produto é obrigatório"}, status=status.HTTP_400_BAD_REQUEST)
             
             categoria = data.get('categoria')
-            if not categoria:
+            if not category:
                 return Response({"erro": "Categoria é obrigatória"}, status=status.HTTP_400_BAD_REQUEST)
 
             url_final = data.get('imagem_url', '') 
@@ -343,8 +343,6 @@ class ProdutoReservarView(APIView):
         except Exception as e:
             return Response({"erro": f"Erro ao processar reserva: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Adicione esta classe ao final do seu arquivo views.py
-
 class ReservaDetailView(APIView):
     parser_classes = (JSONParser,)
 
@@ -358,14 +356,12 @@ class ReservaDetailView(APIView):
             return Response({"erro": "O campo 'status' é obrigatório para atualização."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Aponta direto para o documento da reserva pelo ID dela (pk)
             reserva_ref = db.collection('reservas').document(pk)
             doc = reserva_ref.get()
 
             if not doc.exists:
-                return Response({"erro": "Reserva não localizada."}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"erro": "Reserva não localizada."}, status=status.HTTP_44_NOT_FOUND)
 
-            # Atualiza apenas o campo status e adiciona a data de modificação
             reserva_ref.update({
                 'status': novo_status,
                 'data_atualizacao': firestore.SERVER_TIMESTAMP
@@ -374,7 +370,7 @@ class ReservaDetailView(APIView):
             return Response({
                 "id_reserva": pk,
                 "status_atual": novo_status,
-                "msg": "Status da reserva atualizado com sucesso!"
+                "msg": "Status da reserva updated com sucesso!"
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -386,28 +382,21 @@ class DashboardStatsView(APIView):
         db = firestore.client()
 
         try:
-            # 1. Buscar todos os produtos para calcular os totais de estoque
             produtos_docs = db.collection('produtos').stream()
-            
             total_produtos_cadastrados = 0
             produtos_baixo_estoque = 0
-            mapeamento_precos = {} # Guarda o preço de cada produto pelo ID para usar nas reservas
+            mapeamento_precos = {}
 
             for doc in produtos_docs:
                 total_produtos_cadastrados += 1
                 dados = doc.to_dict()
-                
-                # Guarda o preço convertido para float
                 mapeamento_precos[doc.id] = float(dados.get('preco', 0))
                 
-                # Define "baixa no estoque" se for menor ou igual a 5 unidades
                 estoque = int(dados.get('estoque', 0))
                 if estoque <= 5:
                     produtos_baixo_estoque += 1
 
-            # 2. Buscar todas as reservas para calcular os totais financeiros
             reservas_docs = db.collection('reservas').stream()
-            
             total_reservas_feitas = 0
             total_dinheiro_reservado = 0.0
 
@@ -415,20 +404,14 @@ class DashboardStatsView(APIView):
                 total_reservas_feitas += 1
                 dados_reserva = doc.to_dict()
                 
-                # Ignora cálculos se a reserva foi explicitamente cancelada
                 if dados_reserva.get('status') == 'cancelado':
                     continue
                     
                 prod_id = dados_reserva.get('produto_id')
                 qtd_reservada = int(dados_reserva.get('quantidade', 0))
-                
-                # Pega o preço do produto mapeado. Se não achar, usa 0
                 preco_unitario = mapeamento_precos.get(prod_id, 0.0)
-                
-                # Multiplica a quantidade pelo preço do produto
                 total_dinheiro_reservado += (qtd_reservada * preco_unitario)
 
-            # Retorna todos os dados mastigados para o React Native
             return Response({
                 "total_produtos": total_produtos_cadastrados,
                 "total_reservas": total_reservas_feitas,
@@ -437,4 +420,49 @@ class DashboardStatsView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({"erro": f"Erro ao gerar painel: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)            
+            return Response({"erro": f"Erro ao gerar painel: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===================================================================
+# VIEW ATUALIZADA: RETORNA O NOME DO BANCO E O EMAIL DA AUTENTICAÇÃO
+# ===================================================================
+class ListaTodasReservasView(APIView):
+    def get(self, request):
+        inicializar_firebase_se_necessario()
+        db = firestore.client()
+
+        try:
+            # 1. Mapeia os nomes salvos na coleção 'usuarios' do Firestore
+            usuarios_docs = db.collection('usuarios').stream()
+            mapa_nomes = {}
+            for u_doc in usuarios_docs:
+                mapa_nomes[u_doc.id] = u_doc.to_dict().get('nome', 'Usuário Tsukada')
+
+            # 2. Busca e mapeia os e-mails direto da lista do Firebase Auth de forma global
+            mapa_emails = {}
+            try:
+                usuarios_auth = auth.list_users().users
+                for usuario in usuarios_auth:
+                    mapa_emails[usuario.uid] = usuario.email
+            except Exception as auth_error:
+                print(f"Aviso ao listar Firebase Auth: {auth_error}")
+
+            # 3. Busca todas as reservas registradas
+            reservas_docs = db.collection('reservas').stream()
+            lista_completa = []
+
+            for r_doc in reservas_docs:
+                dados_reserva = r_doc.to_dict()
+                uid_cliente = dados_reserva.get('usuario_id')
+                
+                # Injeta as propriedades identificadoras no objeto
+                dados_reserva['id'] = r_doc.id
+                dados_reserva['nome_usuario'] = mapa_nomes.get(uid_cliente, "Usuário Não Localizado")
+                dados_reserva['email_usuario'] = mapa_emails.get(uid_cliente, "E-mail indisponível")
+                
+                lista_completa.append(dados_reserva)
+
+            return Response(lista_completa, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"erro": f"Erro ao obter painel de reservas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
