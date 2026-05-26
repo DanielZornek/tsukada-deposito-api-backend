@@ -455,10 +455,10 @@ class ListaTodasReservasView(APIView):
                 dados_reserva = r_doc.to_dict()
                 uid_cliente = dados_reserva.get('usuario_id')
                 
-                # Injeta as propriedades identificadoras no objeto
                 dados_reserva['id'] = r_doc.id
-                dados_reserva['nome_usuario'] = mapa_nomes.get(uid_cliente, "Usuário Não Localizado")
-                dados_reserva['email_usuario'] = mapa_emails.get(uid_cliente, "E-mail indisponível")
+
+                dados_reserva['usuario_nome'] = mapa_nomes.get(uid_cliente, "Usuário Não Localizado")
+                dados_reserva['usuario_email'] = mapa_emails.get(uid_cliente, "E-mail indisponível")
                 
                 lista_completa.append(dados_reserva)
 
